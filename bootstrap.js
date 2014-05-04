@@ -25,7 +25,6 @@ const MOUSE_SETTLE_DELAY = 250; // milliseconds;
 const SCREENSHOT_DELAY = 50; // milliseconds
 const SCREENSHOT_INTERVAL = 5; // seconds
 
-
 const THUMBNAIL_ELEMENT_TYPES = [
   "img"
 ];
