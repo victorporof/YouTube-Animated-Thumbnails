@@ -22,29 +22,34 @@ const SCREENSHOT_OFFSET_X = 0; // px
 const SCREENSHOT_OFFSET_Y = 135; // px
 
 const MOUSE_SETTLE_DELAY = 250; // milliseconds;
-const SCREENSHOT_DELAY = 50; // milliseconds
 const SCREENSHOT_INTERVAL = 5; // seconds
+const SCREENSHOT_DELAY = 50; // milliseconds
 
+const gSandboxes = new Map();
+const gRemovable = [];
+
+// A list of node types considered thumbnail icons when hovered.
 const THUMBNAIL_ELEMENT_TYPES = [
   "img"
 ];
+
+// A list of immediate parent node selectors for the above node types.
+// The 'depth' property specifies how many levels up a parent node is
+// considered representative for the thumbnail bounds (x, y, width, height).
 const THUMBNAIL_PARENT_SELECTORS = [
   { selector: "yt-thumb-clip",            depth: 2 },
   { selector: "yt-uix-simple-thumb-wrap", depth: 1 }
 ];
 
-const gSandboxes = new Map();
-const gRemovable = [];
-
 /**
- *
+ * Called when the extension needs to start itself up.
  */
 function startup() {
   Services.obs.addObserver(onGlobalCreated, "content-document-global-created", false);
 }
 
 /**
- *
+ * Called when the extension needs to shut itself down.
  */
 function shutdown() {
   Services.obs.removeObserver(onGlobalCreated, "content-document-global-created");
@@ -57,7 +62,10 @@ function shutdown() {
 }
 
 /**
+ * Observes when a content document global is created.
  *
+ * @param nsIDOMWindow contentWin
+ *        The content window being created.
  */
 function onGlobalCreated(contentWin) {
   if (contentWin.location.host == YOUTUBE_HOST) {
@@ -66,7 +74,10 @@ function onGlobalCreated(contentWin) {
 }
 
 /**
+ * Called whenever YouTube is loaded in a content window.
  *
+ * @parma nsIDOMWindow contentWin
+ *        The content window holding the YouTube page.
  */
 function onYouTubeDomain(contentWin) {
   let chromeWin = getChromeWin(contentWin);
@@ -80,7 +91,7 @@ function onYouTubeDomain(contentWin) {
   contentWin.addEventListener("wheel", onScroll);
 
   /**
-   *
+   * Event listener for the "beforeunload" event on the content window.
    */
   function onBeforeUnload() {
     if (!sandbox) return;
@@ -89,7 +100,7 @@ function onYouTubeDomain(contentWin) {
   }
 
   /**
-   *
+   * Event listener for the "mousemove" event on the content window.
    */
   function onMouseMove(e) {
     if (!sandbox) return;
@@ -107,7 +118,10 @@ function onYouTubeDomain(contentWin) {
   }
 
   /**
+   * Called whenever the mouse stops moving.
    *
+   * @param nsIDOMNode hoveredNode
+   *        The element currently being hovered.
    */
   function onMouseSettled(hoveredNode) {
     let { localName, parentNode } = hoveredNode;
@@ -127,41 +141,52 @@ function onYouTubeDomain(contentWin) {
   }
 
   /**
+   * Called whenever a thumbnail starts being hovered.
    *
+   * @param nsIDOMNode hoveredNode
+   *        The element currently being hovered.
+   * @param number depth
+   *        @see THUMBNAIL_PARENT_SELECTORS.
    */
-  function onThumbnailImageMouseOver(targetNode, depth) {
-    let boundsNode = targetNode;
+  function onThumbnailImageMouseOver(hoveredNode, depth) {
+    let boundsNode = hoveredNode;
     while (depth--) boundsNode = boundsNode.parentNode;
 
     let contentBounds = chromeWin.gBrowser.selectedBrowser.getBoundingClientRect();
     let imageBounds = boundsNode.getBoundingClientRect();
     sandbox.setThumbnailBounds(imageBounds, contentBounds.left, contentBounds.top);
 
-    let id = /(?:http?s?:)?\/\/.*\/(.*?)\//.exec(targetNode.src).pop();
-    sandbox.setVideo(id, onScreenshotAllowed);
+    let id = /(?:http?s?:)?\/\/.*\/(.*?)\//.exec(hoveredNode.src).pop();
+    sandbox.setVideo(id, onThumbnailUpdateable);
   }
 
   /**
-   *
+   * Called whenever the thumbnail is allowed to be updated.
+   */
+  function onThumbnailUpdateable() {
+    if (!sandbox) return;
+    sandbox.updateThumbnail();
+    clearNamedTimeout("yt-mouse-move");
+  }
+
+  /**
+   * Event listener for the "scroll" and "wheel" events on the content window.
    */
   function onScroll() {
     if (!sandbox) return;
     sandbox.hideThumbnail();
     clearNamedTimeout("yt-mouse-move");
   }
-
-  /**
-   *
-   */
-  function onScreenshotAllowed() {
-    if (!sandbox) return;
-    sandbox.updateThumbnail();
-    clearNamedTimeout("yt-mouse-move");
-  }
 }
 
 /**
+ * Gets (or creates if not already available) a YouTube video player sandbox
+ * for the current browser window.
  *
+ * @param nsIDOMWindow chromeWin
+ *        The top level browser window.
+ * @param function callback
+ *        Invoked whenever the sandbox is available.
  */
 function getYouTubeSandboxFor(chromeWin, callback) {
   if (gSandboxes.has(chromeWin)) {
@@ -176,7 +201,16 @@ function getYouTubeSandboxFor(chromeWin, callback) {
 }
 
 /**
+ * Creates a YouTube video player sandbox for the current browser window.
  *
+ * @param nsIDOMWindow ownerWin
+ *        The window owning the sandbox's iframe.
+ * @param number width
+ *        The width of the sandbox's iframe.
+ * @param number height
+ *        The height of the sandbox's iframe.
+ * @param function callback
+ *        Invoked whenever the sandbox is available.
  */
 function createYouTubeSandbox(ownerWin, width, height, callback) {
   let frameParent = ownerWin.document.documentElement;
@@ -185,8 +219,8 @@ function createYouTubeSandbox(ownerWin, width, height, callback) {
   let frameSrc = SANDBOX_HTML +
     "?width=" + frameWidth +
     "&height=" + frameHeight +
-    "&delay=" + SCREENSHOT_DELAY +
-    "&interval=" + SCREENSHOT_INTERVAL;
+    "&interval=" + SCREENSHOT_INTERVAL +
+    "&delay=" + SCREENSHOT_DELAY;
 
   createYouTubeSandboxIframe(frameParent, frameSrc, frameWidth, frameHeight, iframe => {
     let iframeWin = XPCNativeWrapper.unwrap(iframe.contentWindow);
@@ -194,24 +228,26 @@ function createYouTubeSandbox(ownerWin, width, height, callback) {
     let ctx = thumbnailCanvas.getContext("2d");
 
     iframeWin.getPlayer(p => callback({
-      /**
-       *
-       */
       isPlaying: false,
       isVisible: false,
 
       /**
+       * Starts playing a video in the sandbox's iframe.
        *
+       * @param string id
+       *        The YouTube video id, e.g. "dQw4w9WgXcQ".
+       * @param function onThumbnailUpdateable
+       *        Invoked whenever the playback pauses briefly allowing the
+       *        thumbnail to be updated.
        */
-      setVideo: function(id, onScreenshotAllowed) {
+      setVideo: function(id, onThumbnailUpdateable) {
         this.isPlaying = true;
-        iframeWin.onScreenshotAllowed = onScreenshotAllowed;
-
+        iframeWin.onScreenshotAllowed = onThumbnailUpdateable;
         p.loadVideoById(id, 0, "small");
       },
 
       /**
-       *
+       * Stops playing the current video and hides the thumbnail.
        */
       hideThumbnail: function() {
         if (this.isVisible) {
@@ -225,9 +261,16 @@ function createYouTubeSandbox(ownerWin, width, height, callback) {
       },
 
       /**
+       * Sets the thumbnail position.
        *
+       * @param object { left, top, width, height }
+       *        The desired thumbnail bounds.
+       * @param number offsetX [optional]
+       *        Optional left offset.
+       * @param number offsetY [optional]
+       *        Optional top offset.
        */
-      setThumbnailBounds: function({ left, top, width, height }, offsetX, offsetY) {
+      setThumbnailBounds: function({ left, top, width, height }, offsetX = 0, offsetY = 0) {
         let ratioX = width / thumbnailCanvas.width;
         let ratioY = height / thumbnailCanvas.height;
 
@@ -237,7 +280,7 @@ function createYouTubeSandbox(ownerWin, width, height, callback) {
       },
 
       /**
-       *
+       * Shows the thumbnail and updates its contents.
        */
       updateThumbnail: function() {
         ctx.drawWindow(iframeWin,
@@ -254,7 +297,19 @@ function createYouTubeSandbox(ownerWin, width, height, callback) {
 }
 
 /**
+ * Creates a YouTube video player sandbox, used to play videos and
+ * generate thumbnails.
  *
+ * @param nsIDOMNode parentNode
+ *        The parent node which will contain the iframe.
+ * @param string src
+ *        The iframe source url.
+ * @param number width
+ *        The desired iframe width.
+ * @param number height
+ *        The desired iframe height.
+ * @param function callback
+ *        Invoked once the iframe's content is loaded.
  */
 function createYouTubeSandboxIframe(parentNode, src, width, height, callback) {
   let iframe = parentNode.ownerDocument.createElementNS(HTML_NS, "iframe");
@@ -271,8 +326,6 @@ function createYouTubeSandboxIframe(parentNode, src, width, height, callback) {
     "position: fixed;" +
     "right: -" + (width - 1) + "px;" +
     "bottom: -" + (height - 1) + "px;"
-    // "right: 0px;" +
-    // "bottom: 0px;"
   );
 
   iframe.src = src;
@@ -282,7 +335,17 @@ function createYouTubeSandboxIframe(parentNode, src, width, height, callback) {
 }
 
 /**
+ * Creates a thumbnail canvas, which will be displayed above of the
+ * content window.
  *
+ * @param nsIDOMNode parentNode
+ *        The parent node which will contain the canvas.
+ * @param number width
+ *        The desired canvas width.
+ * @param number height
+ *        The desired canvas height.
+ * @return nsIDOMNode
+ *         The newly created and appended canvas node.
  */
 function createThumbnailCanvas(parentNode, width, height) {
   let canvas = parentNode.ownerDocument.createElementNS(HTML_NS, "canvas");
@@ -305,7 +368,12 @@ function createThumbnailCanvas(parentNode, width, height) {
 }
 
 /**
+ * Gets the top level browser window from a content window.
  *
+ * @param nsIDOMWindow innerWin
+ *        The content window to query.
+ * @return nsIDOMWindow
+ *         The top level browser window.
  */
 function getChromeWin(innerWin) {
   return innerWin

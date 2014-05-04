@@ -18,19 +18,31 @@
 
   <script type="text/javascript" src="https://www.youtube.com/iframe_api"></script>
   <script type="text/javascript; version=1.8">
+  // The parameters for the player width, height are passed in the URL query.
   const params = parseQuery();
   const gWidth = getParam(params, "width") | 0;
   const gHeight = getParam(params, "height") | 0;
-  const gScreenshotDelay = getParam(params, "delay") | 0;
+
+  // The interval between video pauses, allowing for screenshots to be taken.
   const gScreenshotInterval = getParam(params, "interval") | 0;
 
+  // The delay after a video pause before allowing a screenshot to be taken.
+  const gScreenshotDelay = getParam(params, "delay") | 0;
+
+  // The YouTube video player and a flag specifying if it was initialized.
   let gPlayer = null;
   let gPlayerIsReady = false;
 
+  // Functions waiting for the YouTube player to finish initializing.
+  // These will be invoked after initialization.
   const gReadyListeners = [];
 
   /**
+   * Owner windows containing this document in an iframe may call
+   * this function to get an initialized YouTube player instance.
    *
+   * @param function callback
+   *        Invoked with the YouTube player instance once initialized.
    */
   function getPlayer(callback) {
     if (!gPlayerIsReady) {
@@ -41,12 +53,15 @@
   }
 
   /**
-   *
+   * Owner windows containing this document in an iframe may overwrite
+   * this function, which will be called whenever the video pauses briefly
+   * allowing a screenshot to be taken.
    */
   function onScreenshotAllowed() {}
 
   /**
-   *
+   * Automatically called by the YouTube embed API whenever the
+   * video player's iframe was created.
    */
   function onYouTubeIframeAPIReady() {
     gPlayer = new YT.Player("player", {
@@ -60,7 +75,8 @@
   }
 
   /**
-   *
+   * Called by the YouTube embed API when the video player instance is ready.
+   * This function will invoke any outstanding callbacks from `getPlayer`.
    */
   function onPlayerReady(e) {
     gPlayer.mute();
@@ -70,7 +86,7 @@
   }
 
   /**
-   *
+   * Called by the YouTube embed API when the playback state changes.
    */
   function onStateChange(e) {
     if (e.data == 0 || e.data == 2) { // ended or paused
@@ -85,7 +101,9 @@
   let gSeekTimeoutId = null;
 
   /**
-   *
+   * Seeks ahead by the specified amount, after a certain timeout.
+   * @param number amount (seconds)
+   * @param number timoeut (milliseconds)
    */
   function seekBy(amount, timeout) {
     gSeekTimeoutId = window.setTimeout(() => {
@@ -95,7 +113,10 @@
   }
 
   /**
+   * Utility function parsing this document's URL query.
    *
+   * @return array
+   *         A list of { name, value } objecst representing query parameters.
    */
   function parseQuery() {
     return document.location.search
@@ -106,7 +127,12 @@
   }
 
   /**
+   * Utility function finding a parameter in this document's URL query.
    *
+   * @param array params
+   *        The list returned by a call to `parseQuery`.
+   * @return string
+   *         The specified param's value.
    */
   function getParam(params, name) {
     return params.find(e => e.name == name).value;
