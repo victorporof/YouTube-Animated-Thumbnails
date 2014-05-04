@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf8">
+  <style type="text/css">
+  body {
+    margin: 0;
+  }
+  #player {
+    pointer-events: none;
+  }
+  </style>
+</head>
+
+<body>
+  <div id="player"></div>
+
+  <script type="text/javascript" src="https://www.youtube.com/iframe_api"></script>
+  <script type="text/javascript; version=1.8">
+  const params = parseQuery();
+  const gWidth = getParam(params, "width") | 0;
+  const gHeight = getParam(params, "height") | 0;
+  const gScreenshotDelay = getParam(params, "delay") | 0;
+  const gScreenshotInterval = getParam(params, "interval") | 0;
+
+  let gPlayer = null;
+  let gPlayerIsReady = false;
+
+  const gReadyListeners = [];
+
+  /**
+   *
+   */
+  function getPlayer(callback) {
+    if (!gPlayerIsReady) {
+      gReadyListeners.push(callback);
+    } else {
+      callback(gPlayer);
+    }
+  }
+
+  /**
+   *
+   */
+  function onScreenshotAllowed() {}
+
+  /**
+   *
+   */
+  function onYouTubeIframeAPIReady() {
+    gPlayer = new YT.Player("player", {
+      width: gWidth,
+      height: gHeight,
+      events: {
+        onReady: onPlayerReady,
+        onStateChange: onStateChange
+      }
+    });
+  }
+
+  /**
+   *
+   */
+  function onPlayerReady(e) {
+    gPlayer.mute();
+    gPlayerIsReady = true;
+    gReadyListeners.forEach(callback => callback(gPlayer));
+    gReadyListeners.length = 0;
+  }
+
+  /**
+   *
+   */
+  function onStateChange(e) {
+    if (e.data == 0 || e.data == 2) { // ended or paused
+      window.clearTimeout(gSeekTimeoutId);
+      return;
+    }
+    if (e.data == 1) { // playing
+      seekBy(gScreenshotInterval, gScreenshotDelay);
+    }
+  }
+
+  let gSeekTimeoutId = null;
+
+  /**
+   *
+   */
+  function seekBy(amount, timeout) {
+    gSeekTimeoutId = window.setTimeout(() => {
+      (onScreenshotAllowed || (() => {}))();
+      gPlayer.seekTo(gPlayer.getCurrentTime() + amount);
+    }, timeout);
+  }
+
+  /**
+   *
+   */
+  function parseQuery() {
+    return document.location.search
+      .substr(1)
+      .split("&")
+      .map(e => e.split("="))
+      .map(e => ({ name: e[0], value: e[1] }));
+  }
+
+  /**
+   *
+   */
+  function getParam(params, name) {
+    return params.find(e => e.name == name).value;
+  }
+  </script>
+</body>
+
+</html>
