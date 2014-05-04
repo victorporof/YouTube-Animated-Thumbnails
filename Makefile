@@ -1,7 +1,8 @@
 PROJECT="yt-animated-thumbnails"
 PWD=`pwd`
 BUILD="build"
-NAME="${PROJECT}.xpi"
+VERSION=`git describe --tags`
+NAME="${PROJECT}-${VERSION}.xpi"
 XPI="${PWD}/${BUILD}/${NAME}"
 
 .PHONY: latest xpi clean
