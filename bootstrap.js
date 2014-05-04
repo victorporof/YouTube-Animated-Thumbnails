@@ -11,7 +11,7 @@ Cu.import("resource://gre/modules/devtools/LayoutHelpers.jsm");
 Cu.import("resource:///modules/devtools/ViewHelpers.jsm");
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
-const SANDBOX_HTML = "FIXME";
+const SANDBOX_HTML = "http://victorporof.github.io/YouTube-Animated-Thumbnails/embed.html";
 const YOUTUBE_HOST = "www.youtube.com";
 
 const VIDEO_WIDTH = 256;
