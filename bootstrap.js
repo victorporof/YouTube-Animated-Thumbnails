@@ -51,7 +51,13 @@ function startup() {
 /**
  * Called when the extension needs to shut itself down.
  */
-function shutdown() {
+function shutdown(data, reason) {
+  // When the application is shutting down we normally don't have to clean
+  // up any UI changes made
+  if (reason == APP_SHUTDOWN) {
+    return;
+  }
+
   Services.obs.removeObserver(onGlobalCreated, "content-document-global-created");
 
   gSandboxes.clear();
