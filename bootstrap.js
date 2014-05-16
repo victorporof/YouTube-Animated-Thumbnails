@@ -460,7 +460,7 @@ function stopListeningToTabEvents(chromeWin) {
 }
 
 /**
- * Waits for the "UI Ready" event on a chrome window.
+ * Waits for the "load" event on a chrome window.
  *
  * @param nsIDOMWindow chromeWindow
  *        The chrome window to wait for.
@@ -468,11 +468,12 @@ function stopListeningToTabEvents(chromeWin) {
  *        Invoked once the chrome window's UI is ready.
  */
 function whenUIReady(chromeWin, callback) {
-  let domWindow = chromeWin.QueryInterface(Ci.nsIInterfaceRequestor)
+  let domWindow = chromeWin
+    .QueryInterface(Ci.nsIInterfaceRequestor)
     .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
 
-  domWindow.addEventListener("UIReady", function onLoad() {
-    domWindow.removeEventListener("UIReady", onLoad, false);
+  domWindow.addEventListener("load", function onLoad() {
+    domWindow.removeEventListener("load", onLoad, false);
     callback(domWindow);
   }, false);
 }
