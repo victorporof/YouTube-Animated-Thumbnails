@@ -45,6 +45,8 @@ const THUMBNAIL_PARENT_SELECTORS = [
  * Called when the extension needs to start itself up.
  */
 function startup() {
+  forEachChromeWin(listenToTabEvents);
+  Services.wm.addListener(gWindowListener);
   Services.obs.addObserver(onGlobalCreated, "content-document-global-created", false);
 }
 
@@ -58,6 +60,8 @@ function shutdown(data, reason) {
     return;
   }
 
+  forEachChromeWin(stopListeningToTabEvents);
+  Services.wm.removeListener(gWindowListener);
   Services.obs.removeObserver(onGlobalCreated, "content-document-global-created");
 
   gSandboxes.clear();
@@ -65,6 +69,35 @@ function shutdown(data, reason) {
 
   // For development.
   Services.obs.notifyObservers(null, "startupcache-invalidate", null);
+}
+
+/**
+ * Observers opening/closing of new chrome windows.
+ */
+var gWindowListener = {
+  onOpenWindow: function(chromeWin) {
+    whenUIReady(chromeWin, listenToTabEvents);
+  },
+  onCloseWindow: () => {},
+  onWindowTitleChange: () => {}
+};
+
+/**
+ * Event listener for the "TabOpen" event on any chrome window.
+ */
+function onTabAdded() {
+  for (let [chromeWin, sandbox] of gSandboxes) {
+    sandbox.hideThumbnail();
+  }
+}
+
+/**
+ * Event listener for the "TabClose" event on any chrome window.
+ */
+function onTabRemoved() {
+  for (let [chromeWin, sandbox] of gSandboxes) {
+    sandbox.hideThumbnail();
+  }
 }
 
 /**
@@ -386,4 +419,60 @@ function getChromeWin(innerWin) {
     .QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIWebNavigation)
     .QueryInterface(Ci.nsIDocShellTreeItem).rootTreeItem
     .QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIDOMWindow);
+}
+
+/**
+ * Invokes a callback for each registered chrome window.
+ *
+ * @param function callback
+ *        Invoked with the respective nsIDOMWindow argument.
+ */
+function forEachChromeWin(callback) {
+  let windows = Services.wm.getEnumerator("navigator:browser");
+  while (windows.hasMoreElements()) {
+    let domWindow = windows.getNext().QueryInterface(Ci.nsIDOMWindow);
+    callback(domWindow);
+  }
+}
+
+/**
+ * Starts listening for tab open/close events on the specified chrome window.
+ *
+ * @param nsIDOMWindow chromeWindow
+ *        The chrome window to add the event listeners to.
+ */
+function listenToTabEvents(chromeWin) {
+  let container = chromeWin.gBrowser.tabContainer;
+  container.addEventListener("TabOpen", onTabAdded, false);
+  container.addEventListener("TabMove", onTabRemoved, false);
+}
+
+/**
+ * Stops listening for tab open/close events on the specified chrome window.
+ *
+ * @param nsIDOMWindow chromeWindow
+ *        The chrome window to remove the event listeners from.
+ */
+function stopListeningToTabEvents(chromeWin) {
+  let container = chromeWin.gBrowser.tabContainer;
+  container.removeEventListener("TabOpen", onTabAdded, false);
+  container.removeEventListener("TabMove", onTabRemoved, false);
+}
+
+/**
+ * Waits for the "UI Ready" event on a chrome window.
+ *
+ * @param nsIDOMWindow chromeWindow
+ *        The chrome window to wait for.
+ * @param function callback
+ *        Invoked once the chrome window's UI is ready.
+ */
+function whenUIReady(chromeWin, callback) {
+  let domWindow = chromeWin.QueryInterface(Ci.nsIInterfaceRequestor)
+    .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
+
+  domWindow.addEventListener("UIReady", function onLoad() {
+    domWindow.removeEventListener("UIReady", onLoad, false);
+    callback(domWindow);
+  }, false);
 }
